@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import computeTotalStats from '../../Utilities/ComputeTotalStats';
 import MainStatsRow from './MainStatsRow';
-import { average } from '../../Utilities/Math';
-import { getTargetTracking, computeBoostSpeed, computeQuickBoostSpeed, computeAttitudeRecovery, computeQBENConsumption, computeQBReloadTime, computeENSupplyEfficiency, computeENRechargeDelay} from '../../Utilities/Conversions';
 
 function MainStatsDisplay({ selectedParts }) {
   const [totalStats, setTotalStats] = useState({});
@@ -16,9 +14,9 @@ function MainStatsDisplay({ selectedParts }) {
   const statsConfigurations = {
     default: [
       { name: "AP", value: totalStats.AP },
-      { name: "Defensive Performance", value: average(totalStats.anti_kinetic_defense, totalStats.anti_energy_defense, totalStats.anti_explosive_defense) },
+      { name: "Defensive Performance", value: totalStats.defensive_performance },
       { name: "Attitude Stability", value: totalStats.attitude_stability },
-      { name: "Boost Speed", value: computeBoostSpeed(totalStats.total_weight ,totalStats.speed) },
+      { name: "Boost Speed", value: totalStats.speed },
       { name: "EN Load", value: totalStats.EN_load },
       { name: "Current Load", value: totalStats.total_load, isBar: true, maxValue: totalStats.load_limit },
       { name: "Current EN Load", value: totalStats.EN_load, isBar: true, maxValue: totalStats.EN_output },
@@ -29,15 +27,15 @@ function MainStatsDisplay({ selectedParts }) {
       { name: "Anti-Energy Defense", value: totalStats.anti_energy_defense },
       { name: "Anti-Explosive Defense", value: totalStats.anti_explosive_defense },
       { name: "Attitude Stability", value: totalStats.attitude_stability},
-      { name: "Attitude Recovery", value: computeAttitudeRecovery(totalStats.total_weight)},
-      { name: "Target Tracking", value: getTargetTracking(totalStats.firearm_spec)},
-      { name: "Boost Speed", value: computeBoostSpeed(totalStats.total_weight ,totalStats.speed) },
-      { name: "QB Speed", value: computeQuickBoostSpeed(totalStats.total_weight, totalStats.qb_speed) },
-      { name: "QB EN Consumption", value: computeQBENConsumption(totalStats.qb_EN_consumption, totalStats.booster_efficiency_adj) },
-      { name: "QB Reload Time", value: computeQBReloadTime(totalStats.qb_reload_time, totalStats.qb_reload_ideal_weight, totalStats.total_weight), roundTo: 0.01 },
+      { name: "Attitude Recovery", value: totalStats.attitude_recovery},
+      { name: "Target Tracking", value: totalStats.target_tracking},
+      { name: "Boost Speed", value: totalStats.speed },
+      { name: "QB Speed", value: totalStats.qb_speed },
+      { name: "QB EN Consumption", value: totalStats.qb_EN_consumption },
+      { name: "QB Reload Time", value: totalStats.qb_reload_time, roundTo: 0.01 },
       { name: "EN Capacity", value: totalStats.EN_capacity },
-      { name: "EN Supply Efficiency", value: computeENSupplyEfficiency(totalStats.EN_output, totalStats.EN_load) },
-      { name: "EN Recharge Delay", value: computeENRechargeDelay(totalStats.EN_recharge, totalStats.generator_supply_adj), roundTo: 0.01 },
+      { name: "EN Supply Efficiency", value: totalStats.EN_supply_efficiency },
+      { name: "EN Recharge Delay", value: totalStats.EN_recharge_delay, roundTo: 0.01 },
       { name: "Total Weight", value: totalStats.total_weight },
       { name: "Total Arms Load", value: totalStats.total_arms_load },
       { name: "Arms Load Limit", value: totalStats.arms_load_limit },

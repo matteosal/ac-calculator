@@ -9,15 +9,14 @@ function computeTotalStats(parts) {
     let totalArmsLoad = 0;
     let armsLoadLimit = 0;
     let totalAttitudeStability = 0;
-    let totalAttitudeRecovery = 0;
     let totalAntiKineticDefense = 0;
     let totalAntiEnergyDefense = 0;
     let totalAntiExplosiveDefense = 0;
     let firearmSpec = 0;
-    let speed = 0;
-    let QBReloadTime = 0;
-    let QBENConsumption = 0;
-    let QBSpeed = 0;
+    let baseSpeed = 0;
+    let baseQBReloadTime = 0;
+    let baseQBENConsumption = 0;
+    let baseQBSpeed = 0;
     let generatorOutputAdj = 0;
     let generatorSupplyAdjustment = 0;
     let boosterEfficiencyAdj = 0;
@@ -53,17 +52,16 @@ function computeTotalStats(parts) {
         totalENCapacity += part.ENCapacity || 0;
         totalWeight += part.Weight || 0;
         totalAttitudeStability += part.AttitudeStability || 0;
-        totalAttitudeRecovery += part.AttitudeRecovery || 0;
         totalAntiKineticDefense += part.AntiKineticDefense || 0;
         totalAntiEnergyDefense += part.AntiEnergyDefense || 0;
         totalAntiExplosiveDefense += part.AntiExplosiveDefense || 0;
         ENOutput += part.ENOutput || 0;
         armsLoadLimit += part.ArmsLoadLimit || 0;
         firearmSpec += part.FirearmSpecialization || 0;
-        speed += part.Speed || 0;
-        QBReloadTime += part.QBReloadTime || 0;
-        QBENConsumption += part.QBENConsumption || 0;
-        QBSpeed += part.QBSpeed || 0;
+        baseSpeed += part.Speed || 0;
+        baseQBReloadTime += part.QBReloadTime || 0;
+        baseQBENConsumption += part.QBENConsumption || 0;
+        baseQBSpeed += part.QBSpeed || 0;
         generatorOutputAdj += part.GeneratorOutputAdj || 0;
         generatorSupplyAdjustment += part.GeneratorSupplyAdj || 0;
         boosterEfficiencyAdj += part.BoosterEfficiencyAdj || 0;
@@ -76,30 +74,191 @@ function computeTotalStats(parts) {
       }
       
     return {
+      defensive_performance: average(
+        totalAntiKineticDefense,
+        totalAntiEnergyDefense,
+        totalAntiExplosiveDefense
+      ),
+      /**/
       AP: totalAP,
-      EN_load: totalENLoad,
-      EN_output: ENOutput,
-      EN_capacity: totalENCapacity,
-      total_weight: totalWeight,
-      total_load: totalWeight - legWeight,
-      total_arms_load: totalArmsLoad,
-      load_limit: loadLimit,
-      arms_load_limit: armsLoadLimit,
-      attitude_stability: totalAttitudeStability,
-      attitude_recovery: totalAttitudeRecovery,
       anti_kinetic_defense: totalAntiKineticDefense,
       anti_energy_defense: totalAntiEnergyDefense,
       anti_explosive_defense: totalAntiExplosiveDefense,
-      firearm_spec: firearmSpec,
-      speed: speed,
-      qb_reload_time: QBReloadTime,
-      qb_EN_consumption: QBENConsumption,
-      qb_speed: QBSpeed,
-      booster_efficiency_adj: boosterEfficiencyAdj,
-      generator_supply_adj: generatorSupplyAdjustment,
-      qb_reload_ideal_weight: boosterIdealWeight,
-      EN_recharge: ENRecharge,
+      attitude_stability: totalAttitudeStability,
+      attitude_recovery: computeAttitudeRecovery(totalWeight),
+      /**/
+      target_tracking: getTargetTracking(firearmSpec),
+      /**/
+      speed: computeBoostSpeed(totalWeight, baseSpeed),
+      qb_speed: computeQuickBoostSpeed(totalWeight, baseQBSpeed),
+      qb_EN_consumption: baseQBENConsumption * (2 - boosterEfficiencyAdj/100.),
+      qb_reload_time: computeQBReloadTime(baseQBReloadTime, boosterIdealWeight, totalWeight),
+      /**/
+      EN_capacity: totalENCapacity,
+      EN_supply_efficiency: computeENSupplyEfficiency(ENOutput, totalENLoad),
+      EN_recharge_delay: 1000. / ENRecharge * (2 - generatorSupplyAdjustment/100.),
+      /**/
+      total_weight: totalWeight,
+      /**/
+      total_arms_load: totalArmsLoad,
+      arms_load_limit: armsLoadLimit,
+      total_load: totalWeight - legWeight,
+      load_limit: loadLimit,
+      EN_load: totalENLoad,
+      EN_output: ENOutput
     };
   }
 
-  export default computeTotalStats;
+function getTargetTracking(firearmSpec) {
+  if (firearmSpec === 0 || firearmSpec == null) return null;
+
+  const mapping = [
+    { firearmSpec: 26,  targetTracking: 41 },
+    { firearmSpec: 45,  targetTracking: 72 },
+    { firearmSpec: 53,  targetTracking: 80 },
+    { firearmSpec: 80,  targetTracking: 86 },
+    { firearmSpec: 88,  targetTracking: 87 },
+    { firearmSpec: 92,  targetTracking: 88 },
+    { firearmSpec: 95,  targetTracking: 89 },
+    { firearmSpec: 96,  targetTracking: 89 },
+    { firearmSpec: 100, targetTracking: 90 },
+    { firearmSpec: 102, targetTracking: 90 },
+    { firearmSpec: 103, targetTracking: 90 },
+    { firearmSpec: 104, targetTracking: 90 },
+    { firearmSpec: 122, targetTracking: 94 },
+    { firearmSpec: 123, targetTracking: 94 },
+    { firearmSpec: 128, targetTracking: 95 },
+    { firearmSpec: 133, targetTracking: 96 },
+    { firearmSpec: 136, targetTracking: 97 },
+    { firearmSpec: 160, targetTracking: 104 }
+  ];
+
+  const matchedValue = mapping.find(item => firearmSpec <= item.firearmSpec);
+  return matchedValue ? matchedValue.targetTracking : null;
+}
+  
+function computeBoostSpeed(totalWeight, hiddenBoostValue) {
+  let multiplier;
+
+  if (totalWeight <= 40000) {
+      multiplier = 1;
+  } else if (totalWeight <= 62500) {
+      // Linear interpolation between 1 and 0.925
+      multiplier = 1 - 0.075 * ((totalWeight - 40000) / 22500);
+  } else if (totalWeight <= 75000) {
+      // Linear interpolation between 0.925 and 0.85
+      multiplier = 0.925 - 0.075 * ((totalWeight - 62500) / 12500);
+  } else if (totalWeight <= 80000) {
+      // Linear interpolation between 0.85 and 0.775
+      multiplier = 0.85 - 0.075 * ((totalWeight - 75000) / 5000);
+  } else if (totalWeight <= 120000) {
+      // Linear interpolation between 0.775 and 0.65
+      multiplier = 0.775 - 0.125 * ((totalWeight - 80000) / 40000);
+  } else {
+      multiplier = 0.65;
+  }
+
+  return hiddenBoostValue * multiplier;
+}
+
+function computeQuickBoostSpeed(totalWeight, hiddenBoostValue) {
+  let multiplier;
+
+  if (totalWeight <= 40000) {
+      multiplier = 1;
+  } else if (totalWeight <= 62500) {
+      // Linear interpolation between 1 and 0.9
+      multiplier = 1.1778 - 0.0444 * totalWeight / 10000;
+  } else if (totalWeight <= 75000) {
+      // Linear interpolation between 0.9 and 0.85
+      multiplier = 1.15 - 0.04 * totalWeight / 10000;
+  } else if (totalWeight <= 80000) {
+      // Linear interpolation between 0.85 and 0.8
+      multiplier = 1.6 - 0.1 * totalWeight / 10000;
+  } else if (totalWeight <= 120000) {
+      // Linear interpolation between 0.8 and 0.7
+      multiplier = 1 - 0.025 * totalWeight / 10000;
+  } else {
+      multiplier = 0.7;
+  }
+
+  return hiddenBoostValue * multiplier;
+}
+
+function computeAttitudeRecovery(weight) {
+  const baseValue = 100;
+  let multiplier = 0;
+
+  if (!weight) {
+    multiplier = 0;
+  }
+  else if (weight <= 40000) {
+    multiplier = 1.5;
+  } else if (weight <= 60000) {
+    // Linear interpolation between 1.5 and 1.2
+    multiplier = 1.5 - 0.3 * ((weight - 40000) / 20000);
+  } else if (weight <= 80000) {
+    // Linear interpolation between 1.2 and 0.9
+    multiplier = 1.2 - 0.3 * ((weight - 60000) / 20000);
+  } else if (weight <= 110000) {
+    // Linear interpolation between 0.9 and 0.6
+    multiplier = 0.9 - 0.3 * ((weight - 80000) / 30000);
+  } else if (weight <= 140000) {
+    // Linear interpolation between 0.6 and 0.57
+    multiplier = 0.6 - 0.03 * ((weight - 110000) / 30000);
+  } else {
+    multiplier = 0.57;
+  }
+
+  return baseValue * multiplier;
+}
+
+function computeQBReloadTime(baseReloadTime, idealWeight, weight) {
+  let weightDiff = (weight - idealWeight) / 10000.;
+  let multiplier = 0;
+  const [m1, q1, m2, q2, m3, q3, m4, q4] = [0.2, 1, 0.4, 0.9, 0.85, 0.45, 0.25, 2.25];
+
+  if (weightDiff <= 0) {
+    multiplier = 1;
+  }
+  else if (weightDiff <= 0.5) {
+    multiplier = m1 * weightDiff + q1;
+  } else if (weightDiff <= 1) {
+    multiplier = m2 * weightDiff + q2;
+  } else if (weightDiff <= 3) {
+    multiplier = m3 * weightDiff + q3;
+  } else if (weightDiff <= 5) {
+    multiplier = m4 * weightDiff + q4;
+  } else {
+    multiplier = 3.5;
+  }
+
+  return multiplier * baseReloadTime;
+}
+
+function computeENSupplyEfficiency(enOutput, enLoad) {
+  let enDiff = enOutput - enLoad;
+  let result = 0;
+  const [m1, q1, m2, q2] = [4.1667, 1500., 4.4118, 1058.8235];
+
+  if (enDiff < 0) {
+    result = 100;
+  }
+  else if (enDiff <= 1800) {
+    result = m1 * enDiff + q1;
+  } else if (enDiff <= 3500) {
+    result = m2 * enDiff + q2;
+  } else {
+    result = 16500;
+  }
+
+  return result;
+}
+
+const average = (...numbers) => {
+    if (numbers.length === 0) return 0;
+    const sum = numbers.reduce((acc, num) => acc + num, 0);
+    return sum / numbers.length;
+};
+
+export default computeTotalStats;
