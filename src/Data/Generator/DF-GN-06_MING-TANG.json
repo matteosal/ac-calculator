@@ -9,7 +9,7 @@
     "PostRecoveryENSupply": 440,
     "EnergyFirearmSpec": 76,
     "Weight": 6320,
-    "ENOutput": 3360,
+    "ENOutput": 3310,
     "GeneratorType": "Internal combustion",
     "PartSlot": "Generator",
     "imagePath": "images/generators/DF-GN-06_MING-TANG.png"
