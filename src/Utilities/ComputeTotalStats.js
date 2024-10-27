@@ -117,9 +117,6 @@ function computeTotalStats(parts) {
       ENSupplyEfficiency
     );
 
-    console.log(weightPerGroup);
-    console.log(enLoadPerGroup);
-
     return {
       defensive_performance: average(
         totalAntiKineticDefense,
