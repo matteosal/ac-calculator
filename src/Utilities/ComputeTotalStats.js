@@ -22,6 +22,11 @@ function computeTotalStats(parts) {
     let boosterEfficiencyAdj = 0;
     let boosterIdealWeight = 0;
     let ENRecharge = 0;
+    let supplyRecovery = 0;
+    let QBJetDuration = 0;
+    let postRecoveryENSupply = 0;
+    let weightPerGroup = [0, 0, 0]; // [unit, body, inner]
+    let enLoadPerGroup = [0, 0, 0]; // [unit, body, inner]
 
     // Remove null and undefined values from array
     parts = parts.filter(part => part !== null && part !== undefined);
@@ -36,15 +41,31 @@ function computeTotalStats(parts) {
     parts.forEach(part => {
         if (!part) return; // In case no part is selected and save is pressed
 
-        // Checks if leg part
-        if (part.LoadLimit > 0) {
-          legWeight = part.Weight;
-          loadLimit = part.LoadLimit;
+        // Check if unit (weapon)
+        if (part.AttackPower) {
+          weightPerGroup[0] += part.Weight;
+          enLoadPerGroup[0] += part.ENLoad;
         }
 
-        // Check if arm part
-        if (part.ArmLoader && part.ArmLoader === true) {
-          totalArmsLoad += part.Weight;
+        // Check if body part
+        if (part.AP > 0) {
+          weightPerGroup[1] += part.Weight;
+          enLoadPerGroup[1] += part.ENLoad;
+          // Checks if leg part
+          if (part.LoadLimit > 0) {
+           legWeight = part.Weight;
+           loadLimit = part.LoadLimit;
+          }
+          // Check if arm part
+          if (part.ArmLoader && part.ArmLoader === true) {
+           totalArmsLoad += part.Weight;
+          }          
+        }
+
+        // Check if inner part
+        if (part.AttackPower == undefined && part.AP == undefined) {
+          weightPerGroup[2] += part.Weight || 0;
+          enLoadPerGroup[2] += part.ENLoad || 0;          
         }
 
         totalAP += part.AP || 0;
@@ -67,12 +88,38 @@ function computeTotalStats(parts) {
         boosterEfficiencyAdj += part.BoosterEfficiencyAdj || 0;
         boosterIdealWeight += part.QBReloadIdealWeight || 0;
         ENRecharge += part.ENRecharge || 0;
+        supplyRecovery += part.SupplyRecovery || 0;
+        QBJetDuration += part.QBJetDuration || 0;
+        postRecoveryENSupply += part.PostRecoveryENSupply || 0;
       });
       
       if (generatorOutputAdj > 0) {
         ENOutput = Math.floor(ENOutput * 0.01 * generatorOutputAdj);
       }
       
+    let effectiveAPKinetic = totalAP * totalAntiKineticDefense / 1000.;
+    let effectiveAPEnergy = totalAP * totalAntiEnergyDefense / 1000.;
+    let effectiveAPExplosive = totalAP * totalAntiExplosiveDefense / 1000.;
+
+    let QBENConsumption = baseQBENConsumption * (2 - boosterEfficiencyAdj/100.);
+    let ENRechargeDelay = 1000. / ENRecharge * (2 - generatorSupplyAdjustment/100.);
+    let ENRechargeDelayRedline = 1000. / supplyRecovery * (2 - generatorSupplyAdjustment/100.);
+    let ENSupplyEfficiency = computeENSupplyEfficiency(ENOutput, totalENLoad);
+
+    let fullRechargeTime = timeToRecoverEnergy(
+      totalENCapacity,
+      ENRechargeDelay,
+      ENSupplyEfficiency
+    );
+    let fullRechargeTimeRedline = timeToRecoverEnergy(
+      totalENCapacity - postRecoveryENSupply,
+      ENRechargeDelayRedline,
+      ENSupplyEfficiency
+    );
+
+    console.log(weightPerGroup);
+    console.log(enLoadPerGroup);
+
     return {
       defensive_performance: average(
         totalAntiKineticDefense,
@@ -91,12 +138,12 @@ function computeTotalStats(parts) {
       /**/
       speed: computeBoostSpeed(totalWeight, baseSpeed),
       qb_speed: computeQuickBoostSpeed(totalWeight, baseQBSpeed),
-      qb_EN_consumption: baseQBENConsumption * (2 - boosterEfficiencyAdj/100.),
+      qb_EN_consumption: QBENConsumption,
       qb_reload_time: computeQBReloadTime(baseQBReloadTime, boosterIdealWeight, totalWeight),
       /**/
       EN_capacity: totalENCapacity,
-      EN_supply_efficiency: computeENSupplyEfficiency(ENOutput, totalENLoad),
-      EN_recharge_delay: 1000. / ENRecharge * (2 - generatorSupplyAdjustment/100.),
+      EN_supply_efficiency: ENSupplyEfficiency,
+      EN_recharge_delay: ENRechargeDelay,
       /**/
       total_weight: totalWeight,
       /**/
@@ -105,8 +152,39 @@ function computeTotalStats(parts) {
       total_load: totalWeight - legWeight,
       load_limit: loadLimit,
       EN_load: totalENLoad,
-      EN_output: ENOutput
-    };
+      EN_output: ENOutput,
+      /* Advanced Stats */
+      effective_AP_kinetic: effectiveAPKinetic,
+      effective_AP_energy: effectiveAPEnergy,
+      effective_AP_explosive: effectiveAPExplosive,
+      effective_AP_avg: average(
+        effectiveAPKinetic,
+        effectiveAPEnergy,
+        effectiveAPExplosive
+      ),
+      infinite_qb_interval: QBJetDuration + timeToRecoverEnergy(
+        QBENConsumption,
+        ENRechargeDelay,
+        ENSupplyEfficiency
+      ),
+      EN_recharge_delay_redline: ENRechargeDelayRedline,
+      full_recharge_time: fullRechargeTime,
+      full_recharge_time_redline: fullRechargeTimeRedline,
+      EN_recovery_func: energyRecoveryFunc(
+        ENRechargeDelay,
+        0,
+        ENSupplyEfficiency,
+        totalENCapacity
+      ),
+      EN_recovery_func_redline: energyRecoveryFunc(
+        ENRechargeDelayRedline,
+        postRecoveryENSupply,
+        ENSupplyEfficiency,
+        totalENCapacity
+      ),
+      group_weight_perc: weightPerGroup.map(x => 100. * x / totalWeight),
+      group_EN_load_perc: enLoadPerGroup.map(x => 100. * x / totalENLoad)
+    }
   }
 
 function getTargetTracking(firearmSpec) {
@@ -253,6 +331,20 @@ function computeENSupplyEfficiency(enOutput, enLoad) {
   }
 
   return result;
+}
+
+function timeToRecoverEnergy(energy, delay, supplyEff) {
+  return energy / supplyEff + delay;
+}
+
+function energyRecoveryFunc(delay, postRecoveryEn, supplyEff, enCapacity) {
+  return time => {
+    if (time < delay) {
+      return 0;
+    } else {
+      return Math.min(supplyEff * (time - delay) + postRecoveryEn, enCapacity);
+    }
+  }
 }
 
 const average = (...numbers) => {
